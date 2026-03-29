@@ -1,10 +1,11 @@
 package br.com.tupinikimtecnologia.entity;
 
 public enum BirdType {
-    VERMELHO(5, 0, 13),
-    VERDE(60, 14, 60),
-    AMARELO(150, 61, 71),
-    VIOLETA(15, 72, 99);
+    // Health values from published APK version
+    VERMELHO(6, 0, 13),     // Red: low health, drops 1-UP on death
+    VERDE(35, 14, 60),      // Green: medium health, most common
+    AMARELO(130, 61, 71),   // Yellow: very high health, rare
+    VIOLETA(15, 72, 99);    // Purple: low-medium health
 
     public final int health;
     public final int minProb;

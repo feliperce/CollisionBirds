@@ -23,6 +23,7 @@ public class MenuScreen extends ScreenAdapter {
     private Rectangle playBounds;
     private Rectangle rankBounds;
     private Rectangle rateBounds;
+    private Rectangle aboutBounds;
 
     private final Vector3 touchPoint = new Vector3();
 
@@ -37,28 +38,37 @@ public class MenuScreen extends ScreenAdapter {
         camera.position.set(GameConfig.CENTER_X, GameConfig.CENTER_Y, 0);
         camera.update();
 
-        // Button positions matching original AndEngine MenuScene layout:
-        // After buildAnimations() + manual offsets, AnchorCenter centers are:
-        //   play: (290, 70), rank: (510, 70), rate: (400, 162)
-        // Convert to LibGDX bottom-left coordinates (buttons are 200x78)
         Texture playTex = game.assets.playButton;
         Texture rankTex = game.assets.rankButton;
         Texture rateTex = game.assets.rateButton;
+        Texture aboutTex = game.assets.aboutButton;
 
+        // Button layout: Play and Rank side by side at bottom, Rate and About above
         playBounds = new Rectangle(
-            290 - playTex.getWidth() / 2f,  // 190
-            70 - playTex.getHeight() / 2f,  // 31
+            290 - playTex.getWidth() / 2f,
+            70 - playTex.getHeight() / 2f,
             playTex.getWidth(), playTex.getHeight());
 
         rankBounds = new Rectangle(
-            510 - rankTex.getWidth() / 2f,  // 410
-            70 - rankTex.getHeight() / 2f,  // 31
+            510 - rankTex.getWidth() / 2f,
+            70 - rankTex.getHeight() / 2f,
             rankTex.getWidth(), rankTex.getHeight());
 
         rateBounds = new Rectangle(
-            400 - rateTex.getWidth() / 2f,  // 300
-            162 - rateTex.getHeight() / 2f, // 123
+            290 - rateTex.getWidth() / 2f,
+            162 - rateTex.getHeight() / 2f,
             rateTex.getWidth(), rateTex.getHeight());
+
+        aboutBounds = new Rectangle(
+            510 - aboutTex.getWidth() / 2f,
+            162 - aboutTex.getHeight() / 2f,
+            aboutTex.getWidth(), aboutTex.getHeight());
+
+        // Start menu music
+        game.assets.stopAllMusic();
+        if (game.assets.menuMusic != null) {
+            game.assets.menuMusic.play();
+        }
 
         Gdx.input.setCatchKey(Input.Keys.BACK, true);
         Gdx.input.setInputProcessor(new InputAdapter() {
@@ -67,9 +77,18 @@ public class MenuScreen extends ScreenAdapter {
                 viewport.unproject(touchPoint.set(screenX, screenY, 0));
 
                 if (playBounds.contains(touchPoint.x, touchPoint.y)) {
+                    if (game.assets.menuClickSound != null) game.assets.menuClickSound.play();
+                    game.assets.stopAllMusic();
                     game.setScreen(new LoadingScreen(game, new GameScreen(game)));
                     return true;
                 }
+                // About screen
+                if (aboutBounds.contains(touchPoint.x, touchPoint.y)) {
+                    if (game.assets.menuClickSound != null) game.assets.menuClickSound.play();
+                    game.setScreen(new AboutScreen(game));
+                    return true;
+                }
+                // Rank and Rate - not implemented (would need Google Play)
                 return false;
             }
 
@@ -111,6 +130,7 @@ public class MenuScreen extends ScreenAdapter {
         game.batch.draw(game.assets.playButton, playBounds.x, playBounds.y);
         game.batch.draw(game.assets.rankButton, rankBounds.x, rankBounds.y);
         game.batch.draw(game.assets.rateButton, rateBounds.x, rateBounds.y);
+        game.batch.draw(game.assets.aboutButton, aboutBounds.x, aboutBounds.y);
 
         game.batch.end();
     }
