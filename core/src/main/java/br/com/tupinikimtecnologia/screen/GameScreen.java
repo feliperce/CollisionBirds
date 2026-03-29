@@ -25,6 +25,9 @@ import br.com.tupinikimtecnologia.entity.PlayerEntity;
 
 import java.util.Iterator;
 
+/**
+ * Core gameplay screen - replicates exact logic from published APK.
+ */
 public class GameScreen extends ScreenAdapter {
 
     private enum State { PLAYING, GAME_OVER }
@@ -33,23 +36,24 @@ public class GameScreen extends ScreenAdapter {
     private OrthographicCamera camera;
     private FitViewport viewport;
 
-    // Game entities
+    // Entities
     private PlayerEntity player;
     private final Array<BirdEntity> birds = new Array<>();
     private final Array<ItemEntity> items = new Array<>();
 
-    // Player state
-    private int lives;
-    private boolean shieldActive;   // from shield item pickup
-    private boolean potionActive;   // from potion item pickup
-    private boolean graceActive;    // brief invincibility after taking damage
-    private float shieldTimer;
-    private float potionTimer;
-    private float graceTimer;
+    // Item state flags (match original: only one of each on screen at a time)
+    private boolean shieldItemOnScreen;
+    private boolean potionItemOnScreen;
+    private boolean oneUpItemOnScreen;
 
-    // Timers
+    // Power-up timers
+    private float shieldDurationTimer;
+    private float potionDurationTimer;
+    private float postHitInvincibilityTimer;
+
+    // Game timers
     private float addBirdTimer;
-    private float gameTimerSeconds;
+    private float itemSpawnTimer; // 1-second tick for item spawn checks
     private int minutes;
     private int seconds;
     private int birdsKilled;
@@ -57,10 +61,10 @@ public class GameScreen extends ScreenAdapter {
     // Game state
     private State state;
     private boolean dragging;
+    private boolean gameStopped; // stops collision/spawn logic
 
-    // Game over UI bounds
+    // Game over UI
     private Rectangle playButtonBounds;
-    private Rectangle facebookButtonBounds;
 
     private final Vector3 touchPoint = new Vector3();
     private final GlyphLayout layout = new GlyphLayout();
@@ -79,19 +83,19 @@ public class GameScreen extends ScreenAdapter {
         birds.clear();
         items.clear();
         addBirdTimer = 0;
-        gameTimerSeconds = 0;
+        itemSpawnTimer = 0;
         minutes = 0;
         seconds = 0;
         birdsKilled = 0;
-        lives = GameConfig.PLAYER_INITIAL_LIVES;
-        shieldActive = false;
-        potionActive = false;
-        graceActive = false;
-        shieldTimer = 0;
-        potionTimer = 0;
-        graceTimer = 0;
+        shieldItemOnScreen = false;
+        potionItemOnScreen = false;
+        oneUpItemOnScreen = false;
+        shieldDurationTimer = 0;
+        potionDurationTimer = 0;
+        postHitInvincibilityTimer = 0;
         state = State.PLAYING;
         dragging = false;
+        gameStopped = false;
 
         player = new PlayerEntity(GameConfig.CENTER_X, GameConfig.CENTER_Y, game.assets.playerSheet);
 
@@ -134,7 +138,7 @@ public class GameScreen extends ScreenAdapter {
             public boolean keyDown(int keycode) {
                 if (keycode == Input.Keys.BACK || keycode == Input.Keys.ESCAPE) {
                     game.assets.stopAllMusic();
-                    game.setScreen(new LoadingScreen(game, new MenuScreen(game)));
+                    game.setScreen(new MenuScreen(game));
                     return true;
                 }
                 return false;
@@ -157,76 +161,109 @@ public class GameScreen extends ScreenAdapter {
 
         batch.draw(game.assets.gameBackground, 0, 0, GameConfig.CAMERA_WIDTH, GameConfig.CAMERA_HEIGHT);
 
-        for (ItemEntity item : items) {
-            item.draw(batch);
-        }
-        for (BirdEntity bird : birds) {
-            bird.draw(batch);
-        }
+        for (ItemEntity item : items) item.draw(batch);
+        for (BirdEntity bird : birds) bird.draw(batch);
         player.draw(batch);
 
-        if (state == State.PLAYING) {
-            drawHUD(batch);
-        }
-        if (state == State.GAME_OVER) {
-            drawGameOver(batch);
-        }
+        if (state == State.PLAYING) drawHUD(batch);
+        if (state == State.GAME_OVER) drawGameOver(batch);
 
         batch.end();
     }
 
-    private void updateGame(float delta) {
-        gameTimerSeconds += delta;
-        int totalSeconds = (int) gameTimerSeconds;
-        minutes = totalSeconds / 60;
-        seconds = totalSeconds % 60;
+    // ========== GAME UPDATE ==========
 
+    private void updateGame(float delta) {
         player.update(delta);
 
-        // Countdown timers for power-ups and grace period
-        if (shieldActive) {
-            shieldTimer -= delta;
-            if (shieldTimer <= 0) {
-                shieldActive = false;
-                if (game.assets.shieldLostSound != null) game.assets.shieldLostSound.play();
-            }
-        }
-        if (potionActive) {
-            potionTimer -= delta;
-            if (potionTimer <= 0) {
-                potionActive = false;
-            }
-        }
-        if (graceActive) {
-            graceTimer -= delta;
-            if (graceTimer <= 0) {
-                graceActive = false;
-            }
-        }
+        // Power-up duration timers
+        updatePowerUpTimers(delta);
 
-        // Bird spawn timer
+        // Time counter (1-second ticks) + item spawn
+        updateTimeAndItemSpawn(delta);
+
+        // Bird spawn (every 5 seconds)
         addBirdTimer += delta;
-        if (addBirdTimer >= GameConfig.ADD_BIRD_TIMER_DELAY) {
+        if (addBirdTimer >= GameConfig.ADD_BIRD_TIMER_DELAY && !gameStopped) {
             addBirdTimer -= GameConfig.ADD_BIRD_TIMER_DELAY;
             spawnBird();
         }
 
-        // Item spawn - only 1/160 chance per frame AND only if no items on screen
-        trySpawnItem();
+        // Update birds and items
+        for (BirdEntity bird : birds) bird.update(delta);
+        for (ItemEntity item : items) item.update(delta);
 
-        for (BirdEntity bird : birds) {
-            bird.update(delta);
-        }
-        for (ItemEntity item : items) {
-            item.update(delta);
+        if (!gameStopped) {
+            checkBirdLifeAndRemoval();
+            checkPlayerBirdCollisions();
         }
 
-        checkBirdCollisions();
-        checkBirdDeaths();
-        cleanupItems();
+        // Item pickup always checked (even during transitions)
         checkItemPickup();
-        checkPlayerCollision();
+        cleanupItems();
     }
+
+    private void updatePowerUpTimers(float delta) {
+        // Shield duration
+        if (player.hasShield()) {
+            shieldDurationTimer -= delta;
+            if (shieldDurationTimer <= 0) {
+                player.setShield(false);
+                if (game.assets.shieldLostSound != null) game.assets.shieldLostSound.play();
+            }
+        }
+
+        // Potion duration (13 seconds)
+        if (player.hasPotionInvisibility() && potionDurationTimer > 0) {
+            potionDurationTimer -= delta;
+            if (potionDurationTimer <= 0) {
+                player.setPotionInvisibility(false);
+                potionDurationTimer = 0;
+            }
+        }
+
+        // Post-hit invincibility (4 seconds) - uses same flag as potion
+        if (player.hasPotionInvisibility() && postHitInvincibilityTimer > 0) {
+            postHitInvincibilityTimer -= delta;
+            if (postHitInvincibilityTimer <= 0) {
+                // Only clear if potion timer is also expired
+                if (potionDurationTimer <= 0) {
+                    player.setPotionInvisibility(false);
+                }
+                postHitInvincibilityTimer = 0;
+            }
+        }
+    }
+
+    private void updateTimeAndItemSpawn(float delta) {
+        itemSpawnTimer += delta;
+        if (itemSpawnTimer >= 1f) {
+            itemSpawnTimer -= 1f;
+
+            // Increment game time
+            seconds++;
+            if (seconds >= 60) {
+                minutes++;
+                seconds = 0;
+            }
+
+            // Item spawn check (every 1-second tick, matching original)
+            if (!gameStopped && !potionItemOnScreen && !shieldItemOnScreen
+                && !player.hasPotionInvisibility() && !player.hasShield()) {
+
+                int roll = MathUtils.random(GameConfig.ITEM_SPAWN_DENOMINATOR - 1);
+                if (roll >= 1 && roll <= 8) {
+                    // Spawn POTION (5% chance per second)
+                    spawnPotionItem();
+                } else if (roll >= 9 && roll <= 13) {
+                    // Spawn SHIELD (3.1% chance per second)
+                    spawnShieldItem();
+                }
+            }
+        }
+    }
+
+    // ========== SPAWNING ==========
 
     private void spawnBird() {
         float x = MathUtils.random(GameConfig.SPAWN_MARGIN, GameConfig.CAMERA_WIDTH - GameConfig.SPAWN_MARGIN);
@@ -246,49 +283,124 @@ public class GameScreen extends ScreenAdapter {
         birds.add(new BirdEntity(x, y, sheet, type));
     }
 
-    private void trySpawnItem() {
-        // Don't spawn if there's already an item on screen
-        for (ItemEntity item : items) {
-            if (!item.isCollected() && !item.isExpired()) return;
-        }
-        // Don't spawn if a power-up is already active
-        if (shieldActive || potionActive) return;
-
-        // 1/160 chance per frame (~once every 2.7 seconds at 60fps)
-        if (MathUtils.random(GameConfig.ITEM_SPAWN_DENOMINATOR - 1) != 0) return;
-
+    private void spawnPotionItem() {
         float x = MathUtils.random(GameConfig.SPAWN_MARGIN, GameConfig.CAMERA_WIDTH - GameConfig.SPAWN_MARGIN);
         float y = MathUtils.random(GameConfig.SPAWN_MARGIN, GameConfig.CAMERA_HEIGHT - GameConfig.SPAWN_MARGIN);
+        items.add(new ItemEntity(x, y, game.assets.potionStatTexture, ItemEntity.ItemType.POTION));
+        potionItemOnScreen = true;
+    }
 
-        // 60% shield, 40% potion
-        if (MathUtils.random(9) < 6) {
-            items.add(new ItemEntity(x, y, game.assets.shieldStatTexture, ItemEntity.ItemType.SHIELD));
-        } else {
-            items.add(new ItemEntity(x, y, game.assets.potionStatTexture, ItemEntity.ItemType.POTION));
+    private void spawnShieldItem() {
+        float x = MathUtils.random(GameConfig.SPAWN_MARGIN, GameConfig.CAMERA_WIDTH - GameConfig.SPAWN_MARGIN);
+        float y = MathUtils.random(GameConfig.SPAWN_MARGIN, GameConfig.CAMERA_HEIGHT - GameConfig.SPAWN_MARGIN);
+        items.add(new ItemEntity(x, y, game.assets.shieldStatTexture, ItemEntity.ItemType.SHIELD));
+        shieldItemOnScreen = true;
+    }
+
+    private void spawn1UpItem(float x, float y) {
+        if (oneUpItemOnScreen) return;
+        // life-stat.png is a 4-frame horizontal sprite sheet (animated hearts)
+        items.add(new ItemEntity(x, y, game.assets.lifeStatTexture, ItemEntity.ItemType.LIFE, 4));
+        oneUpItemOnScreen = true;
+    }
+
+    // ========== COLLISION & REMOVAL ==========
+
+    private void checkBirdLifeAndRemoval() {
+        Iterator<BirdEntity> it = birds.iterator();
+        while (it.hasNext()) {
+            BirdEntity bird = it.next();
+
+            // Bird with 0 bounces and marked as hit -> remove
+            if (bird.getRemainingBounces() <= 0 && bird.hasBeenHit()) {
+                // If RED bird, drop 1-UP at death position
+                if (bird.getType() == BirdType.VERMELHO && !oneUpItemOnScreen) {
+                    spawn1UpItem(bird.getCenterX(), bird.getCenterY());
+                }
+                bird.markForRemoval();
+                it.remove();
+            }
+        }
+    }
+
+    /**
+     * Player-bird collision logic (EXACT match of original published APK):
+     * - If player has POTION (hasPotionInvisibility): NO collision at all, birds pass through
+     * - If player has SHIELD: bird DIES, punch sound, shield stays, player takes no damage
+     * - If UNPROTECTED: bird DIES, punch sound, player loses 1 life, gets 4s invincibility
+     */
+    private void checkPlayerBirdCollisions() {
+        for (BirdEntity bird : birds) {
+            // Only collide with visible, alive, not-already-hit birds
+            if (bird.isInvisible() || bird.isMarkedForRemoval() || bird.hasBeenHit()
+                || bird.getRemainingBounces() <= 0) continue;
+
+            if (!bird.overlaps(player.x, player.y, player.width, player.height)) continue;
+
+            // --- Collision detected ---
+
+            if (!player.isDead() && !player.hasPotionInvisibility() && !player.hasShield()) {
+                // UNPROTECTED: player takes damage, bird dies
+                birdsKilled++;
+                if (game.assets.punchSound != null) game.assets.punchSound.play();
+
+                bird.kill(); // set bounces to 0
+
+                // Player gets post-hit invincibility (4s) - uses same flag as potion
+                player.setPotionInvisibility(true);
+                postHitInvincibilityTimer = GameConfig.POST_HIT_INVINCIBILITY;
+
+                // Lose 1 life
+                player.setLives(player.getLives() - 1);
+
+                if (player.getLives() <= 0) {
+                    // Player dies
+                    if (game.assets.playerDieSound != null) game.assets.playerDieSound.play();
+                    player.setDead(true);
+                    triggerGameOver();
+                }
+                return; // only one collision per frame
+            }
+
+            if (player.hasShield()) {
+                // SHIELDED: bird dies, shield STAYS active, no damage
+                birdsKilled++;
+                if (game.assets.punchSound != null) game.assets.punchSound.play();
+                bird.kill(); // set bounces to 0
+                return;
+            }
+
+            // If player has potion: NO collision processing (birds pass through)
+            // This is handled by the !hasPotionInvisibility check above
         }
     }
 
     private void checkItemPickup() {
-        for (ItemEntity item : items) {
+        Iterator<ItemEntity> it = items.iterator();
+        while (it.hasNext()) {
+            ItemEntity item = it.next();
             if (item.isCollected() || item.isExpired()) continue;
-            if (item.overlapsPlayer(player.x, player.y, player.width, player.height)) {
-                item.collect();
-                switch (item.type) {
-                    case SHIELD:
-                        shieldActive = true;
-                        shieldTimer = GameConfig.SHIELD_DURATION;
-                        if (game.assets.shieldUseSound != null) game.assets.shieldUseSound.play();
-                        break;
-                    case POTION:
-                        potionActive = true;
-                        potionTimer = GameConfig.POTION_DURATION;
-                        if (game.assets.potionUseSound != null) game.assets.potionUseSound.play();
-                        break;
-                    case LIFE:
-                        lives++;
-                        if (game.assets.oneUpSound != null) game.assets.oneUpSound.play();
-                        break;
-                }
+            if (!item.overlapsPlayer(player.x, player.y, player.width, player.height)) continue;
+
+            item.collect();
+            switch (item.type) {
+                case POTION:
+                    if (game.assets.potionUseSound != null) game.assets.potionUseSound.play();
+                    player.setPotionInvisibility(true);
+                    potionDurationTimer = GameConfig.POTION_DURATION; // 13 seconds
+                    potionItemOnScreen = false;
+                    break;
+                case SHIELD:
+                    if (game.assets.shieldUseSound != null) game.assets.shieldUseSound.play();
+                    player.setShield(true);
+                    shieldDurationTimer = GameConfig.SHIELD_DURATION; // 6 seconds
+                    shieldItemOnScreen = false;
+                    break;
+                case LIFE:
+                    if (game.assets.oneUpSound != null) game.assets.oneUpSound.play();
+                    player.setLives(player.getLives() + 1);
+                    oneUpItemOnScreen = false;
+                    break;
             }
         }
     }
@@ -297,7 +409,15 @@ public class GameScreen extends ScreenAdapter {
         Iterator<ItemEntity> it = items.iterator();
         while (it.hasNext()) {
             ItemEntity item = it.next();
-            if (item.isCollected() || item.isExpired()) {
+            if (item.isCollected()) {
+                it.remove();
+            } else if (item.isExpired()) {
+                // Clear the on-screen flags when items expire
+                switch (item.type) {
+                    case POTION: potionItemOnScreen = false; break;
+                    case SHIELD: shieldItemOnScreen = false; break;
+                    case LIFE: oneUpItemOnScreen = false; break;
+                }
                 it.remove();
             }
         }
@@ -306,18 +426,20 @@ public class GameScreen extends ScreenAdapter {
     private void checkBirdCollisions() {
         for (int i = 0; i < birds.size; i++) {
             BirdEntity a = birds.get(i);
-            if (a.isDead() || a.isImmortal() || a.getHealth() <= 0) continue;
+            if (a.isInvisible() || a.getRemainingBounces() <= 0) continue;
 
             for (int j = i + 1; j < birds.size; j++) {
                 BirdEntity b = birds.get(j);
-                if (b.isDead() || b.isImmortal() || b.getHealth() <= 0) continue;
+                if (b.isInvisible() || b.getRemainingBounces() <= 0) continue;
 
                 if (a.overlaps(b)) {
-                    a.velocityX = a.velocityX >= 0 ? GameConfig.BIRD_BOUNCE_SPEED : -GameConfig.BIRD_BOUNCE_SPEED;
-                    a.velocityY = a.velocityY >= 0 ? GameConfig.BIRD_BOUNCE_SPEED : -GameConfig.BIRD_BOUNCE_SPEED;
-                    b.velocityX = b.velocityX >= 0 ? GameConfig.BIRD_BOUNCE_SPEED : -GameConfig.BIRD_BOUNCE_SPEED;
-                    b.velocityY = b.velocityY >= 0 ? GameConfig.BIRD_BOUNCE_SPEED : -GameConfig.BIRD_BOUNCE_SPEED;
+                    // Bird-bird collision: fixed bounce speed (10 * PPM)
+                    a.velocityX = a.velocityX >= 0 ? GameConfig.BIRD_COLLISION_BOUNCE_SPEED : -GameConfig.BIRD_COLLISION_BOUNCE_SPEED;
+                    a.velocityY = a.velocityY >= 0 ? GameConfig.BIRD_COLLISION_BOUNCE_SPEED : -GameConfig.BIRD_COLLISION_BOUNCE_SPEED;
+                    b.velocityX = b.velocityX >= 0 ? GameConfig.BIRD_COLLISION_BOUNCE_SPEED : -GameConfig.BIRD_COLLISION_BOUNCE_SPEED;
+                    b.velocityY = b.velocityY >= 0 ? GameConfig.BIRD_COLLISION_BOUNCE_SPEED : -GameConfig.BIRD_COLLISION_BOUNCE_SPEED;
 
+                    // Separate
                     float dx = a.getCenterX() - b.getCenterX();
                     float dy = a.getCenterY() - b.getCenterY();
                     float dist = (float) Math.sqrt(dx * dx + dy * dy);
@@ -337,55 +459,11 @@ public class GameScreen extends ScreenAdapter {
         }
     }
 
-    private void checkBirdDeaths() {
-        Iterator<BirdEntity> it = birds.iterator();
-        while (it.hasNext()) {
-            BirdEntity bird = it.next();
-            if (bird.getHealth() <= 0 && bird.canDie()) {
-                birdsKilled++;
-                // Red birds drop 1-UP (extra life)
-                if (bird.getType() == BirdType.VERMELHO) {
-                    items.add(new ItemEntity(
-                        bird.getCenterX(), bird.getCenterY(),
-                        game.assets.lifeTexture, ItemEntity.ItemType.LIFE));
-                }
-                bird.markDead();
-                it.remove();
-            }
-        }
-    }
+    // ========== GAME OVER ==========
 
-    private void checkPlayerCollision() {
-        // Player is invincible if shield, potion, or grace period is active
-        boolean isInvincible = shieldActive || potionActive || graceActive;
-
-        for (BirdEntity bird : birds) {
-            if (!bird.isImmortal() && !bird.isDead() && bird.getHealth() > 0) {
-                if (bird.overlaps(player.x, player.y, player.width, player.height)) {
-                    if (isInvincible) {
-                        if (game.assets.punchSound != null) game.assets.punchSound.play();
-                    } else {
-                        // Take damage
-                        lives--;
-                        if (game.assets.playerDieSound != null) game.assets.playerDieSound.play();
-
-                        if (lives <= 0) {
-                            lives = 0;
-                            displayGameOver();
-                            return;
-                        }
-                        // Grace period after damage (separate from shield/potion)
-                        graceActive = true;
-                        graceTimer = 2f;
-                    }
-                    return;
-                }
-            }
-        }
-    }
-
-    private void displayGameOver() {
+    private void triggerGameOver() {
         state = State.GAME_OVER;
+        gameStopped = true;
         dragging = false;
 
         game.assets.stopAllMusic();
@@ -397,26 +475,23 @@ public class GameScreen extends ScreenAdapter {
         float popupY = GameConfig.CENTER_Y - popupH / 2 + 30;
 
         Texture playTex = game.assets.gameOverPlayButton;
-        Texture fbTex = game.assets.facebookButton;
-
         float btnSpacing = 30;
         float btnY = popupY - playTex.getHeight() - 10;
         float playBtnX = GameConfig.CENTER_X - playTex.getWidth() - btnSpacing / 2;
         playButtonBounds = new Rectangle(playBtnX, btnY, playTex.getWidth(), playTex.getHeight());
-
-        float fbBtnX = GameConfig.CENTER_X + btnSpacing / 2;
-        facebookButtonBounds = new Rectangle(fbBtnX, btnY, fbTex.getWidth(), fbTex.getHeight());
     }
 
     private boolean handleGameOverTouch(float worldX, float worldY) {
         if (playButtonBounds != null && playButtonBounds.contains(worldX, worldY)) {
             if (game.assets.menuClickSound != null) game.assets.menuClickSound.play();
             game.assets.stopAllMusic();
-            game.setScreen(new LoadingScreen(game, new GameScreen(game)));
+            game.setScreen(new GameScreen(game));
             return true;
         }
         return false;
     }
+
+    // ========== DRAWING ==========
 
     private void drawHUD(SpriteBatch batch) {
         BitmapFont font = game.assets.hudFont;
@@ -425,30 +500,34 @@ public class GameScreen extends ScreenAdapter {
         // Time (top-left)
         font.draw(batch, "Time: " + minutes + "." + seconds, 10, GameConfig.CAMERA_HEIGHT - 10);
 
-        // Lives (top-right) - heart icon + count
-        Texture heart = game.assets.lifeStatTexture;
-        if (heart != null) {
-            float heartX = GameConfig.CAMERA_WIDTH - 110;
-            float heartY = GameConfig.CAMERA_HEIGHT - 10 - heart.getHeight();
-            batch.draw(heart, heartX, heartY);
-            font.draw(batch, "x " + lives, heartX + heart.getWidth() + 5, GameConfig.CAMERA_HEIGHT - 10);
+        // Lives (top-right)
+        Texture lifeIcon = game.assets.lifeTexture;
+        if (lifeIcon != null) {
+            float iconX = GameConfig.CAMERA_WIDTH - 110;
+            float iconY = GameConfig.CAMERA_HEIGHT - 10 - lifeIcon.getHeight();
+            batch.draw(lifeIcon, iconX, iconY);
+            font.draw(batch, "x " + player.getLives(), iconX + lifeIcon.getWidth() + 5, GameConfig.CAMERA_HEIGHT - 10);
         }
 
-        // Shield indicator (top-left, below time)
-        if (shieldActive && game.assets.shieldStatTexture != null) {
+        // Shield timer indicator
+        if (player.hasShield()) {
             Texture st = game.assets.shieldStatTexture;
-            batch.draw(st, 10, GameConfig.CAMERA_HEIGHT - 70);
-            font.draw(batch, String.format("%.0f", Math.max(0, shieldTimer)),
-                15 + st.getWidth(), GameConfig.CAMERA_HEIGHT - 45);
+            if (st != null) {
+                batch.draw(st, 10, GameConfig.CAMERA_HEIGHT - 70);
+                font.draw(batch, String.format("%.0f", Math.max(0, shieldDurationTimer)),
+                    15 + st.getWidth(), GameConfig.CAMERA_HEIGHT - 45);
+            }
         }
 
-        // Potion indicator
-        if (potionActive && game.assets.potionStatTexture != null) {
+        // Potion timer indicator
+        if (player.hasPotionInvisibility() && potionDurationTimer > 0) {
             Texture pt = game.assets.potionStatTexture;
-            float potY = shieldActive ? GameConfig.CAMERA_HEIGHT - 110 : GameConfig.CAMERA_HEIGHT - 70;
-            batch.draw(pt, 10, potY);
-            font.draw(batch, String.format("%.0f", Math.max(0, potionTimer)),
-                15 + pt.getWidth(), potY + pt.getHeight() - 5);
+            if (pt != null) {
+                float py = player.hasShield() ? GameConfig.CAMERA_HEIGHT - 110 : GameConfig.CAMERA_HEIGHT - 70;
+                batch.draw(pt, 10, py);
+                font.draw(batch, String.format("%.0f", Math.max(0, potionDurationTimer)),
+                    15 + pt.getWidth(), py + pt.getHeight() - 5);
+            }
         }
     }
 
@@ -470,9 +549,6 @@ public class GameScreen extends ScreenAdapter {
 
         if (playButtonBounds != null) {
             batch.draw(game.assets.gameOverPlayButton, playButtonBounds.x, playButtonBounds.y);
-        }
-        if (facebookButtonBounds != null) {
-            batch.draw(game.assets.facebookButton, facebookButtonBounds.x, facebookButtonBounds.y);
         }
     }
 

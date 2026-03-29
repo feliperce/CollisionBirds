@@ -43,25 +43,28 @@ public class MenuScreen extends ScreenAdapter {
         Texture rateTex = game.assets.rateButton;
         Texture aboutTex = game.assets.aboutButton;
 
-        // Button layout: Play and Rank side by side at bottom, Rate and About above
+        // Menu layout matching original published APK:
+        // PLAY: centered, upper row
+        // RATE: bottom-left, RANK: bottom-right
+        // ABOUT (?): top-right corner (small 50x50 button)
         playBounds = new Rectangle(
-            290 - playTex.getWidth() / 2f,
-            70 - playTex.getHeight() / 2f,
+            GameConfig.CENTER_X - playTex.getWidth() / 2f,
+            155 - playTex.getHeight() / 2f,
             playTex.getWidth(), playTex.getHeight());
-
-        rankBounds = new Rectangle(
-            510 - rankTex.getWidth() / 2f,
-            70 - rankTex.getHeight() / 2f,
-            rankTex.getWidth(), rankTex.getHeight());
 
         rateBounds = new Rectangle(
             290 - rateTex.getWidth() / 2f,
-            162 - rateTex.getHeight() / 2f,
+            60 - rateTex.getHeight() / 2f,
             rateTex.getWidth(), rateTex.getHeight());
 
+        rankBounds = new Rectangle(
+            510 - rankTex.getWidth() / 2f,
+            60 - rankTex.getHeight() / 2f,
+            rankTex.getWidth(), rankTex.getHeight());
+
         aboutBounds = new Rectangle(
-            510 - aboutTex.getWidth() / 2f,
-            162 - aboutTex.getHeight() / 2f,
+            GameConfig.CAMERA_WIDTH - aboutTex.getWidth() - 15,
+            GameConfig.CAMERA_HEIGHT - aboutTex.getHeight() - 15,
             aboutTex.getWidth(), aboutTex.getHeight());
 
         // Start menu music

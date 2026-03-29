@@ -4,7 +4,6 @@ import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
-import com.badlogic.gdx.math.Rectangle;
 
 import br.com.tupinikimtecnologia.config.GameConfig;
 
@@ -14,34 +13,36 @@ public class BirdEntity {
     public float velocityX, velocityY;
     public float width, height;
 
-    private int health;
-    private boolean immortal;
-    private boolean dead;
-    private boolean canDie;
-
-    private float immortalTimer;
-    private float deathTimer;
+    private int remainingBounces;
+    private final float speed; // pixels per second (per bird type)
+    private boolean invisible;  // starts true, becomes false after 3s
+    private boolean markedForRemoval;
+    private boolean hasBeenHit; // set 4s after bounces reach 0
     private float stateTime;
+    private float appearTimer;   // 3s countdown to become visible
+    private float removableTimer; // 4s countdown after bounces=0 to become removable
+    private boolean removableTimerStarted;
 
-    private Animation<TextureRegion> frontAnim;
-    private Animation<TextureRegion> leftAnim;
-    private Animation<TextureRegion> rightAnim;
-    private TextureRegion deathFrame;
+    private final Animation<TextureRegion> frontAnim;
+    private final Animation<TextureRegion> leftAnim;
+    private final Animation<TextureRegion> rightAnim;
+    private final TextureRegion deathFrame;
     private Animation<TextureRegion> currentAnim;
 
     private final BirdType type;
-    private final Rectangle bounds = new Rectangle();
 
     public BirdEntity(float x, float y, Texture spriteSheet, BirdType type) {
         this.type = type;
-        this.health = type.health;
-        this.immortal = true;
-        this.immortalTimer = GameConfig.BIRD_IMMORTAL_TIMER_DELAY;
-        this.dead = false;
-        this.canDie = false;
+        this.remainingBounces = type.bounces;
+        this.speed = type.getPixelSpeed();
+        this.invisible = true;
+        this.markedForRemoval = false;
+        this.hasBeenHit = false;
         this.stateTime = 0;
+        this.appearTimer = GameConfig.BIRD_APPEAR_DELAY;
+        this.removableTimer = GameConfig.BIRD_REMOVABLE_DELAY;
+        this.removableTimerStarted = false;
 
-        // Split 4x4 sprite sheet
         int frameW = spriteSheet.getWidth() / 4;
         int frameH = spriteSheet.getHeight() / 4;
         TextureRegion[][] frames = TextureRegion.split(spriteSheet, frameW, frameH);
@@ -49,103 +50,100 @@ public class BirdEntity {
         this.width = frameW;
         this.height = frameH;
 
-        // Row 0: front, Row 1: left, Row 2: right, Row 3: death (frame 0)
         frontAnim = new Animation<>(GameConfig.FRAME_DURATION, frames[0]);
         frontAnim.setPlayMode(Animation.PlayMode.LOOP);
-
         leftAnim = new Animation<>(GameConfig.FRAME_DURATION, frames[1]);
         leftAnim.setPlayMode(Animation.PlayMode.LOOP);
-
         rightAnim = new Animation<>(GameConfig.FRAME_DURATION, frames[2]);
         rightAnim.setPlayMode(Animation.PlayMode.LOOP);
-
         deathFrame = frames[3][0];
 
         currentAnim = frontAnim;
 
-        // Center the bird at the given position
+        // Center at given position
         this.x = x - width / 2;
         this.y = y - height / 2;
 
-        // Initial velocity
-        this.velocityX = GameConfig.BIRD_INITIAL_VX;
+        // Initial velocity: (-speed, 10*PPM) - bird moves left and slightly down
+        this.velocityX = -speed;
         this.velocityY = GameConfig.BIRD_INITIAL_VY;
     }
 
     public void update(float delta) {
-        if (dead) return;
+        if (markedForRemoval) return;
 
         stateTime += delta;
 
-        // Immortality countdown
-        if (immortal && health > 0) {
-            immortalTimer -= delta;
-            if (immortalTimer <= 0) {
-                immortal = false;
+        // Appear timer (bird becomes visible after 3s)
+        if (invisible) {
+            appearTimer -= delta;
+            if (appearTimer <= 0) {
+                invisible = false;
             }
+            return; // Don't move while invisible
         }
 
-        // Death countdown (after health reaches 0)
-        if (health <= 0 && !canDie) {
-            deathTimer += delta;
-            if (deathTimer >= GameConfig.BIRD_DEATH_TIMER_DELAY) {
-                canDie = true;
+        // If bounces reached 0, start removable timer
+        if (remainingBounces <= 0) {
+            if (!removableTimerStarted) {
+                removableTimerStarted = true;
+                removableTimer = GameConfig.BIRD_REMOVABLE_DELAY;
             }
+            removableTimer -= delta;
+            if (removableTimer <= 0) {
+                hasBeenHit = true;
+            }
+            return; // Don't move when dead
         }
-
-        // Don't move if health is 0
-        if (health <= 0) return;
 
         // Move
         x += velocityX * delta;
         y += velocityY * delta;
 
-        // Wall bouncing - can hit corner (2 walls) in one frame, matches original behavior
+        // Wall bouncing with per-bird speed
         if (x < 0) {
-            if (health > 0) health--;
-            velocityX = GameConfig.BIRD_BOUNCE_SPEED;
+            if (remainingBounces > 0) remainingBounces--;
+            velocityX = speed;
             currentAnim = rightAnim;
             x = 0;
         } else if (x + width > GameConfig.CAMERA_WIDTH) {
-            if (health > 0) health--;
-            velocityX = -GameConfig.BIRD_BOUNCE_SPEED;
+            if (remainingBounces > 0) remainingBounces--;
+            velocityX = -speed;
             currentAnim = leftAnim;
             x = GameConfig.CAMERA_WIDTH - width;
         }
 
         if (y < 0) {
-            if (health > 0) health--;
-            velocityY = GameConfig.BIRD_BOUNCE_SPEED;
+            if (remainingBounces > 0) remainingBounces--;
+            velocityY = speed;
             y = 0;
         } else if (y + height > GameConfig.CAMERA_HEIGHT) {
-            if (health > 0) health--;
-            velocityY = -GameConfig.BIRD_BOUNCE_SPEED;
+            if (remainingBounces > 0) remainingBounces--;
+            velocityY = -speed;
             currentAnim = frontAnim;
             y = GameConfig.CAMERA_HEIGHT - height;
-        }
-
-        // When health reaches 0, enter dying state
-        if (health <= 0) {
-            health = 0;
-            immortal = true;
-            deathTimer = 0;
         }
     }
 
     public void draw(SpriteBatch batch) {
-        if (dead) return;
+        if (markedForRemoval) return;
 
         TextureRegion frame;
-        if (health <= 0) {
+        if (remainingBounces <= 0) {
             frame = deathFrame;
         } else {
             frame = currentAnim.getKeyFrame(stateTime);
         }
 
-        float alpha = (immortal || health <= 0) ? 0.5f : 1f;
+        float alpha = (invisible || remainingBounces <= 0) ? 0.5f : 1f;
         batch.setColor(1, 1, 1, alpha);
         batch.draw(frame, x, y, width, height);
         batch.setColor(1, 1, 1, 1);
+    }
+
+    /** Kill the bird instantly (set bounces to 0) */
+    public void kill() {
+        this.remainingBounces = 0;
     }
 
     public boolean overlaps(float otherX, float otherY, float otherW, float otherH) {
@@ -159,16 +157,11 @@ public class BirdEntity {
 
     public float getCenterX() { return x + width / 2; }
     public float getCenterY() { return y + height / 2; }
-    public boolean isImmortal() { return immortal; }
-    public boolean isDead() { return dead; }
-    public boolean canDie() { return canDie; }
-    public int getHealth() { return health; }
+    public boolean isInvisible() { return invisible; }
+    public boolean isMarkedForRemoval() { return markedForRemoval; }
+    public boolean hasBeenHit() { return hasBeenHit; }
+    public int getRemainingBounces() { return remainingBounces; }
     public BirdType getType() { return type; }
 
-    public void markDead() { this.dead = true; }
-
-    public Rectangle getBounds() {
-        bounds.set(x, y, width, height);
-        return bounds;
-    }
+    public void markForRemoval() { this.markedForRemoval = true; }
 }

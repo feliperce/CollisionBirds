@@ -1,20 +1,28 @@
 package br.com.tupinikimtecnologia.entity;
 
 public enum BirdType {
-    // Health values from published APK version
-    VERMELHO(6, 0, 13),     // Red: low health, drops 1-UP on death
-    VERDE(35, 14, 60),      // Green: medium health, most common
-    AMARELO(130, 61, 71),   // Yellow: very high health, rare
-    VIOLETA(15, 72, 99);    // Purple: low-medium health
+    // Published APK values: bounces, speed (Box2D m/s), spawn range
+    VERMELHO(6, 30f, 0, 13),     // Red: fast, few bounces, drops 1-UP
+    VERDE(35, 10f, 14, 60),      // Green: slow, many bounces, most common
+    AMARELO(130, 10f, 61, 71),   // Yellow: slow, very many bounces, rare
+    VIOLETA(15, 15f, 72, 99);    // Purple: medium speed/bounces
 
-    public final int health;
+    public final int bounces;
+    public final float speed;     // Box2D m/s (multiply by PPM=32 for px/s)
     public final int minProb;
     public final int maxProb;
 
-    BirdType(int health, int minProb, int maxProb) {
-        this.health = health;
+    private static final float PPM = 32f;
+
+    BirdType(int bounces, float speed, int minProb, int maxProb) {
+        this.bounces = bounces;
+        this.speed = speed;
         this.minProb = minProb;
         this.maxProb = maxProb;
+    }
+
+    public float getPixelSpeed() {
+        return speed * PPM;
     }
 
     public static BirdType fromRandom(int value) {
