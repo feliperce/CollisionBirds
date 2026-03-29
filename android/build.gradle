@@ -107,6 +107,7 @@ tasks.matching { it.name.contains("merge") && it.name.contains("JniLibFolders") 
 }
 
 tasks.register('run', Exec) {
+  dependsOn 'installDebug'
   def path
   def localProperties = project.file("../local.properties")
   if (localProperties.exists()) {
