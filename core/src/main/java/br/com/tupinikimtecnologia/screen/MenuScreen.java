@@ -123,11 +123,11 @@ public class MenuScreen extends ScreenAdapter {
             410 - logoTex.getWidth() / 2f,
             340 - logoTex.getHeight() / 2f);
 
-        // Copyright at bottom center
+        // Copyright at bottom right
         Texture copTex = game.assets.copyrightMenu;
         game.batch.draw(copTex,
-            GameConfig.CENTER_X - copTex.getWidth() / 2f,
-            15 - copTex.getHeight() / 2f);
+            GameConfig.CAMERA_WIDTH - copTex.getWidth() - 10,
+            10);
 
         // Buttons
         game.batch.draw(game.assets.playButton, playBounds.x, playBounds.y);
