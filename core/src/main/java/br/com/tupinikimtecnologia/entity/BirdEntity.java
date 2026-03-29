@@ -146,13 +146,19 @@ public class BirdEntity {
         this.remainingBounces = 0;
     }
 
+    public float getHitboxX() { return x + width  * (1f - GameConfig.HITBOX_SCALE) / 2f; }
+    public float getHitboxY() { return y + height * (1f - GameConfig.HITBOX_SCALE) / 2f; }
+    public float getHitboxW() { return width  * GameConfig.HITBOX_SCALE; }
+    public float getHitboxH() { return height * GameConfig.HITBOX_SCALE; }
+
     public boolean overlaps(float otherX, float otherY, float otherW, float otherH) {
-        return x < otherX + otherW && x + width > otherX
-            && y < otherY + otherH && y + height > otherY;
+        float hx = getHitboxX(), hy = getHitboxY(), hw = getHitboxW(), hh = getHitboxH();
+        return hx < otherX + otherW && hx + hw > otherX
+            && hy < otherY + otherH && hy + hh > otherY;
     }
 
     public boolean overlaps(BirdEntity other) {
-        return overlaps(other.x, other.y, other.width, other.height);
+        return overlaps(other.getHitboxX(), other.getHitboxY(), other.getHitboxW(), other.getHitboxH());
     }
 
     public float getCenterX() { return x + width / 2; }

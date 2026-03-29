@@ -27,6 +27,9 @@ public class GameConfig {
     public static final float ITEM_DESPAWN_TIME = 6f;         // items disappear after 6s
     public static final int ITEM_SPAWN_DENOMINATOR = 160;
 
+    // Collision hitbox as fraction of sprite frame size (0.6 = 60% centered)
+    public static final float HITBOX_SCALE = 0.6f;
+
     // Animation
     public static final float FRAME_DURATION = 0.2f;
 

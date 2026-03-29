@@ -102,6 +102,11 @@ public class PlayerEntity {
     public int getLives() { return lives; }
     public void setLives(int lives) { this.lives = lives; }
 
+    public float getHitboxX() { return x + width  * (1f - GameConfig.HITBOX_SCALE) / 2f; }
+    public float getHitboxY() { return y + height * (1f - GameConfig.HITBOX_SCALE) / 2f; }
+    public float getHitboxW() { return width  * GameConfig.HITBOX_SCALE; }
+    public float getHitboxH() { return height * GameConfig.HITBOX_SCALE; }
+
     public float getCenterX() { return x + width / 2; }
     public float getCenterY() { return y + height / 2; }
 

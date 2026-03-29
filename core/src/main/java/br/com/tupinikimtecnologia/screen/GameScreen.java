@@ -333,7 +333,7 @@ public class GameScreen extends ScreenAdapter {
             if (bird.isInvisible() || bird.isMarkedForRemoval() || bird.hasBeenHit()
                 || bird.getRemainingBounces() <= 0) continue;
 
-            if (!bird.overlaps(player.x, player.y, player.width, player.height)) continue;
+            if (!bird.overlaps(player.getHitboxX(), player.getHitboxY(), player.getHitboxW(), player.getHitboxH())) continue;
 
             // --- Collision detected ---
 
@@ -437,12 +437,12 @@ public class GameScreen extends ScreenAdapter {
                     b.velocityX = b.velocityX >= 0 ? GameConfig.BIRD_COLLISION_BOUNCE_SPEED : -GameConfig.BIRD_COLLISION_BOUNCE_SPEED;
                     b.velocityY = b.velocityY >= 0 ? GameConfig.BIRD_COLLISION_BOUNCE_SPEED : -GameConfig.BIRD_COLLISION_BOUNCE_SPEED;
 
-                    // Separate
+                    // Separate using hitbox radii
                     float dx = a.getCenterX() - b.getCenterX();
                     float dy = a.getCenterY() - b.getCenterY();
                     float dist = (float) Math.sqrt(dx * dx + dy * dy);
                     if (dist > 0) {
-                        float overlap = (a.width / 2 + b.width / 2) - dist;
+                        float overlap = (a.getHitboxW() / 2 + b.getHitboxW() / 2) - dist;
                         if (overlap > 0) {
                             float nx = dx / dist;
                             float ny = dy / dist;
