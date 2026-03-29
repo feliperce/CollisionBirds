@@ -222,11 +222,11 @@ public class GameScreen extends ScreenAdapter {
             }
         }
 
-        // Post-hit invincibility (4 seconds) - uses same flag as potion
-        if (player.hasPotionInvisibility() && postHitInvincibilityTimer > 0) {
+        // Post-hit invincibility (4 seconds)
+        if (player.isHitInvincible() && postHitInvincibilityTimer > 0) {
             postHitInvincibilityTimer -= delta;
             if (postHitInvincibilityTimer <= 0) {
-                // Only clear if potion timer is also expired
+                player.setHitInvincible(false);
                 if (potionDurationTimer <= 0) {
                     player.setPotionInvisibility(false);
                 }
@@ -339,15 +339,16 @@ public class GameScreen extends ScreenAdapter {
 
             // --- Collision detected ---
 
-            if (!player.isDead() && !player.hasPotionInvisibility() && !player.hasShield()) {
+            if (!player.isDead() && !player.hasPotionInvisibility() && !player.isHitInvincible() && !player.hasShield()) {
                 // UNPROTECTED: player takes damage, bird dies
                 birdsKilled++;
                 if (game.assets.punchSound != null) game.assets.punchSound.play();
 
                 bird.kill(); // set bounces to 0
 
-                // Player gets post-hit invincibility (4s) - uses same flag as potion
+                // Player gets post-hit invincibility (4s) with blinking
                 player.setPotionInvisibility(true);
+                player.setHitInvincible(true);
                 postHitInvincibilityTimer = GameConfig.POST_HIT_INVINCIBILITY;
 
                 // Lose 1 life

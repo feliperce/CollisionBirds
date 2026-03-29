@@ -26,6 +26,7 @@ public class PlayerEntity {
     private boolean dead;
     private boolean hasPotionInvisibility;
     private boolean hasShield;
+    private boolean hitInvincible; // post-damage blinking
     private int lives;
 
     private final Rectangle bounds = new Rectangle();
@@ -69,10 +70,15 @@ public class PlayerEntity {
             frame = normalAnim.getKeyFrame(stateTime);
         }
 
-        // Blinking effect when invincible from potion or post-hit (NOT shield)
-        if (!dead && hasPotionInvisibility && !hasShield) {
-            float blink = (float) Math.sin(stateTime * 12) * 0.3f + 0.5f; // oscillates 0.2 - 0.8
-            batch.setColor(1, 1, 1, blink);
+        if (!dead && !hasShield) {
+            if (hitInvincible) {
+                // Post-damage: blinking effect
+                float blink = (float) Math.sin(stateTime * 12) * 0.3f + 0.5f;
+                batch.setColor(1, 1, 1, blink);
+            } else if (hasPotionInvisibility) {
+                // Potion: fixed semi-transparent
+                batch.setColor(1, 1, 1, 0.5f);
+            }
         }
 
         batch.draw(frame, x, y, width, height);
@@ -80,17 +86,19 @@ public class PlayerEntity {
     }
 
     public void setPosition(float centerX, float centerY) {
-        this.x = centerX - width / 2;
-        this.y = centerY - height / 2;
+        this.x = Math.max(0, Math.min(centerX - width / 2, GameConfig.CAMERA_WIDTH - width));
+        this.y = Math.max(0, Math.min(centerY - height / 2, GameConfig.CAMERA_HEIGHT - height));
     }
 
     public void setShield(boolean active) { this.hasShield = active; }
     public void setPotionInvisibility(boolean active) { this.hasPotionInvisibility = active; }
+    public void setHitInvincible(boolean active) { this.hitInvincible = active; }
     public void setDead(boolean dead) { this.dead = dead; }
 
     public boolean isDead() { return dead; }
     public boolean hasPotionInvisibility() { return hasPotionInvisibility; }
     public boolean hasShield() { return hasShield; }
+    public boolean isHitInvincible() { return hitInvincible; }
     public int getLives() { return lives; }
     public void setLives(int lives) { this.lives = lives; }
 
