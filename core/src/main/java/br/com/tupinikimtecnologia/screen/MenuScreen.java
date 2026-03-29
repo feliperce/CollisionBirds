@@ -120,7 +120,7 @@ public class MenuScreen extends ScreenAdapter {
         // Logo centered near top
         Texture logoTex = game.assets.logo;
         game.batch.draw(logoTex,
-            410 - logoTex.getWidth() / 2f,
+            GameConfig.CENTER_X - logoTex.getWidth() / 2f,
             340 - logoTex.getHeight() / 2f);
 
         // Copyright at bottom right

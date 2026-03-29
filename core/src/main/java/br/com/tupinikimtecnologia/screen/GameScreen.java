@@ -195,6 +195,7 @@ public class GameScreen extends ScreenAdapter {
 
         if (!gameStopped) {
             checkBirdLifeAndRemoval();
+            checkBirdCollisions();
             checkPlayerBirdCollisions();
         }
 
@@ -227,9 +228,6 @@ public class GameScreen extends ScreenAdapter {
             postHitInvincibilityTimer -= delta;
             if (postHitInvincibilityTimer <= 0) {
                 player.setHitInvincible(false);
-                if (potionDurationTimer <= 0) {
-                    player.setPotionInvisibility(false);
-                }
                 postHitInvincibilityTimer = 0;
             }
         }
@@ -251,7 +249,7 @@ public class GameScreen extends ScreenAdapter {
             if (!gameStopped && !potionItemOnScreen && !shieldItemOnScreen
                 && !player.hasPotionInvisibility() && !player.hasShield()) {
 
-                int roll = MathUtils.random(GameConfig.ITEM_SPAWN_DENOMINATOR - 1);
+                int roll = MathUtils.random(1, GameConfig.ITEM_SPAWN_DENOMINATOR);
                 if (roll >= 1 && roll <= 8) {
                     // Spawn POTION (5% chance per second)
                     spawnPotionItem();
@@ -347,7 +345,6 @@ public class GameScreen extends ScreenAdapter {
                 bird.kill(); // set bounces to 0
 
                 // Player gets post-hit invincibility (4s) with blinking
-                player.setPotionInvisibility(true);
                 player.setHitInvincible(true);
                 postHitInvincibilityTimer = GameConfig.POST_HIT_INVINCIBILITY;
 
@@ -499,7 +496,7 @@ public class GameScreen extends ScreenAdapter {
         if (font == null) return;
 
         // Time (top-left)
-        font.draw(batch, "Time: " + minutes + "." + seconds, 10, GameConfig.CAMERA_HEIGHT - 10);
+        font.draw(batch, "Time: " + String.format("%d:%02d", minutes, seconds), 10, GameConfig.CAMERA_HEIGHT - 10);
 
         // Lives (top-right)
         Texture lifeIcon = game.assets.lifeTexture;
@@ -541,7 +538,7 @@ public class GameScreen extends ScreenAdapter {
 
         BitmapFont font = game.assets.gameOverFont;
         if (font != null) {
-            String timeStr = minutes + "." + seconds;
+            String timeStr = String.format("%d:%02d", minutes, seconds);
             layout.setText(font, timeStr);
             font.draw(batch, timeStr,
                 GameConfig.CENTER_X - layout.width / 2,

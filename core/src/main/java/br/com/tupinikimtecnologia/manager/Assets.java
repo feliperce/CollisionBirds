@@ -22,7 +22,6 @@ public class Assets {
     public Texture rankButton;
     public Texture rateButton;
     public Texture aboutButton;
-    public Texture achievementsButton;
 
     // Game
     public Texture gameBackground;
@@ -40,7 +39,6 @@ public class Assets {
 
     // Game Over
     public Texture gameoverPopup;
-    public Texture facebookButton;
     public Texture gameOverPlayButton;
 
     // About
@@ -83,7 +81,6 @@ public class Assets {
         rankButton = loadTexture("gfx/menu/button_rank.png");
         rateButton = loadTexture("gfx/menu/button_rate.png");
         aboutButton = loadTexture("gfx/menu/button_about.png");
-        achievementsButton = loadTexture("gfx/menu/button_achievements.png");
 
         // Game textures
         gameBackground = loadTexture("gfx/game/background-game.png");
@@ -101,7 +98,6 @@ public class Assets {
 
         // Game over
         gameoverPopup = loadTexture("gfx/menu/popup_gameover.png");
-        facebookButton = loadTexture("gfx/menu/button_play.png");
         gameOverPlayButton = loadTexture("gfx/menu/button_play.png");
 
         // About
@@ -182,7 +178,6 @@ public class Assets {
         safeDispose(rankButton);
         safeDispose(rateButton);
         safeDispose(aboutButton);
-        safeDispose(achievementsButton);
         safeDispose(gameBackground);
         safeDispose(birdVermelhoSheet);
         safeDispose(birdVerdeSheet);
@@ -194,7 +189,6 @@ public class Assets {
         safeDispose(shieldStatTexture);
         safeDispose(potionStatTexture);
         safeDispose(gameoverPopup);
-        safeDispose(facebookButton);
         safeDispose(gameOverPlayButton);
         safeDispose(aboutBackground);
         safeDispose(aboutContent);

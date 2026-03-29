@@ -72,7 +72,7 @@ public class AboutScreen extends ScreenAdapter {
         Texture cop = game.assets.copyrightMenu;
         game.batch.draw(cop,
             GameConfig.CENTER_X - cop.getWidth() / 2f,
-            15 - cop.getHeight() / 2f);
+            10);
 
         game.batch.end();
     }

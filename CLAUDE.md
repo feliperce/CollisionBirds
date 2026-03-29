@@ -1,3 +1,7 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 # CollisionBirds - LibGDX
 
 ## Project Info
@@ -27,7 +31,9 @@ All source in `core/src/main/java/br/com/tupinikimtecnologia/`:
 - `screen/SplashScreen.java` - Splash screen (2 seconds, green background)
 - `screen/LoadingScreen.java` - Brief "Loading..." transition between screens
 - `screen/MenuScreen.java` - Main menu with play/rank/rate buttons, Back/Escape exits
-- `screen/GameScreen.java` - Core gameplay: bird spawning, collision detection, game over overlay
+- `screen/GameScreen.java` - Core gameplay: bird spawning, collision detection, item system, game over overlay
+- `screen/AboutScreen.java` - About screen (any touch or Back returns to menu)
+- `entity/ItemEntity.java` - Collectible items (static or animated), with blink-on-expiry and AABB pickup detection
 
 ## Game Mechanics
 - Player controls a blue bird by touch-dragging (must touch ON the player first)
@@ -39,11 +45,17 @@ All source in `core/src/main/java/br/com/tupinikimtecnologia/`:
 - New birds are immortal (transparent) for 3 seconds after spawn
 - Birds with 0 health show death frame, become transparent, are removed after 4 seconds
 - Back/Escape key: returns to menu from game, exits app from menu
+- Player has lives (default 5); losing all lives triggers game over
+- 3 item types spawn randomly during gameplay: Shield (6s duration), Potion/invisibility (13s), 1-UP (restores a life)
+- Only one item of each type on screen at a time; items despawn after 6s with a blinking warning at 2s remaining
+- Item spawn check runs every second; chance is `1-in-ITEM_SPAWN_DENOMINATOR` (160) per tick per item type
+- Post-hit invincibility lasts 4 seconds (player blinks); player with potion is semi-transparent and immune to collision
 
 ## Technical Notes
 - **Velocity conversion**: Original AndEngine used Box2D m/s with PPM=32. LibGDX uses px/s (multiplied by 32)
 - **FreeType**: Used for "8-BIT WONDER.TTF" and "Square.ttf" fonts (desktop/Android only, not GWT)
 - **No Box2D**: Physics are manually implemented (velocity integration, AABB collision, separation)
-- **Sprite sheets**: 4x4 grids. Row 0=front, Row 1=left, Row 2=right, Row 3=death frame
+- **Player sprite sheet**: 4x4 grid. Row 0=normal front, Row 1=potion effect, Row 2=shield equipped, Row 3=dead (X eyes)
+- **Enemy sprite sheets**: 4x4 grids. Row 0=front, Row 1=left, Row 2=right, Row 3=death frame
 - **Coordinate system**: 800x480, (0,0) at bottom-left, FitViewport for aspect ratio
 - **Shared SpriteBatch**: Single batch in Main, reused by all screens
